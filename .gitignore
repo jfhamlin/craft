@@ -15,4 +15,6 @@
 *.la
 *.a
 
+# Outputs
 TAGS
+test

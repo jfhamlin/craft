@@ -11,9 +11,17 @@ typedef enum {
 
 typedef enum {
   RAFT_STATUS_OK,
+  RAFT_STATUS_OUT_OF_MEMORY,
   RAFT_STATUS_INVALID_TERM,
   RAFT_STATUS_INVALID_ARGS,
 } raft_status_t;
+
+#define RAFT_SUCCESS(_status) (_status == RAFT_STATUS_OK)
+#define RAFT_FAILURE(_status) (_status != RAFT_STATUS_OK)
+
+typedef enum {
+  RAFT_EVENT_TYPE_HEARTBEAT,
+} raft_event_type_t;
 
 typedef _Bool raft_bool_t;
 #define RAFT_TRUE  1

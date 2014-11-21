@@ -4,6 +4,8 @@
 #include "raft_callbacks.h"
 
 typedef struct raft_config {
+  raft_nodeid_t selfid;
+
   uint32_t       node_count;
   raft_nodeid_t* p_nodeids;
 

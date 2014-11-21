@@ -59,20 +59,18 @@ $(OUTDIR)/%.o: %.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(OPTFLAGS) -c -o $@ $<
 
-#### Concrete Target Rules #### 
+#### Concrete Target Rules ####
 
 raft: $(OBJS) $(OUTDIR)/src/test.o
 	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
 
 ### Test targets
 
-# test: test_parse
-# 	$(PYTHON) ./tests/run_parser_tests.py
+test: $(OBJS) $(OUTDIR)/tests/test_main.o
+	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
+	./test 2> /dev/null
 
-# test_parse: $(OBJS) $(OUTDIR)/src/test_parse.o
-# 	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
-
-#### Clean #### 
+#### Clean ####
 
 clean:
 	rm -rf $(OUTDIR_BASE)/* *~ raft raft.dSYM TAGS
@@ -86,4 +84,4 @@ check-syntax:
 #### tags
 
 tags: $(SRCS)
-	ctags -e -R -f TAGS $(SRCDIR) $(INCDIR)
+	ctags -e -R -f TAGS $(SRCDIR) $(INCDIR) tests

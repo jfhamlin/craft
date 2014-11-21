@@ -38,6 +38,10 @@ raft_log_t* raft_log_create() {
   return p_log;
 }
 
+void raft_log_free(raft_log_t* p_log) {
+
+}
+
 raft_index_t raft_log_length(raft_log_t const* p_log) {
   return p_log->num_entries;
 }

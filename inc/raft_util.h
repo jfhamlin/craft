@@ -21,11 +21,11 @@
 
 #define RAFT_ASSERT(exp) RAFT_ASSERT_STR(exp, "")
 
-#define RAFT_LOG(_p_state, _str, ...)           \
-  do {                                          \
-    printf("%llu: ", _p_state->p.self);         \
-    printf(_str, ##__VA_ARGS__);                \
-    printf("\n");                               \
+#define RAFT_LOG(_p_state, _str, ...)                   \
+  do {                                                  \
+    fprintf(stderr, "%llu: ", _p_state->p.self);        \
+    fprintf(stderr, _str, ##__VA_ARGS__);               \
+    fprintf(stderr, "\n");                              \
   } while (0)
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))

@@ -40,6 +40,8 @@ typedef struct raft_state {
     raft_index_t* p_next_index;
     raft_index_t* p_match_index;
   } l;
+
+  raft_bool_t active;
 } raft_state_t;
 
 void raft_state_set_type(raft_state_t* p_state, raft_node_type_t type);

@@ -10,12 +10,67 @@
 
 static raft_bool_t should_begin_election(raft_state_t* p_state);
 static raft_status_t begin_election(raft_state_t* p_state);
-static void* check_leader(void* arg);
+
+raft_status_t raft_init(raft_state_t** pp_state, raft_config_t* p_config) {
+  *pp_state = NULL;
+
+  raft_state_t* p_state = calloc(1, sizeof(raft_state_t));
+  if (p_state == NULL) {
+    return RAFT_STATUS_OUT_OF_MEMORY;
+  }
+
+  p_state->type = RAFT_NODE_TYPE_FOLLOWER;
+  p_state->p.self = p_config->selfid;
+
+  raft_log_t* p_log = p_state->p.p_log = raft_log_create();
+  if (p_state == NULL) {
+    free(p_state);
+    return RAFT_STATUS_OUT_OF_MEMORY;
+  }
+
+  p_state->p_config = p_config;
+
+  if (p_config->election_timeout_max_ms <= p_config->election_timeout_min_ms) {
+    raft_log_free(p_log);
+    free(p_state);
+    RAFT_LOG(p_state,
+             "Invalid election_timeout settings: election_timeout_max_ms (%u) <= election_timeout_min_ms (%u)",
+             p_config->election_timeout_max_ms,
+             p_config->election_timeout_min_ms);
+    return RAFT_STATUS_INVALID_ARGS;
+  }
+
+  uint32_t const ballot_size = p_config->node_count * sizeof(raft_bool_t);
+  p_state->l.p_ballot = calloc(1, ballot_size);
+  if (p_state->l.p_ballot == NULL) {
+    raft_log_free(p_log);
+    free(p_state);
+    return RAFT_STATUS_OUT_OF_MEMORY;
+  }
+
+  *pp_state = p_state;
+  return RAFT_STATUS_OK;
+}
+
+void raft_deinit(raft_state_t* p_state) {
+  free(p_state->l.p_ballot);
+  raft_log_free(p_state->p.p_log);
+  free(p_state);
+}
 
 raft_status_t raft_start(raft_state_t* p_state) {
-  pthread_t thread;
-  pthread_create(&thread, NULL, check_leader, p_state);
+  RAFT_LOG(p_state, "Starting...");
+  p_state->active = RAFT_TRUE;
+  raft_config_t const* p_config = p_state->p_config;
+  return (*p_config->cb.p_schedule_event)(p_state,
+                                          p_config->election_timeout_min_ms,
+                                          RAFT_EVENT_TYPE_HEARTBEAT);
+}
 
+raft_status_t raft_stop(raft_state_t* p_state) {
+  RAFT_LOG(p_state, "Stopping...");
+  p_state->active = RAFT_FALSE;
+  raft_state_set_type(p_state, RAFT_NODE_TYPE_FOLLOWER);
   return RAFT_STATUS_OK;
 }
 
@@ -67,34 +122,46 @@ static raft_bool_t should_begin_election(raft_state_t* p_state) {
   return !heard_from_leader;
 }
 
-static void* check_leader(void* arg) {
-  raft_state_t* p_state = arg;
+raft_status_t raft_receive_event(raft_state_t* p_state, raft_event_type_t type) {
+  raft_status_t status = RAFT_STATUS_OK;
 
-  for (;;) {
-    raft_config_t const* p_config = p_state->p_config;
+  RAFT_ASSERT(type == RAFT_EVENT_TYPE_HEARTBEAT);
 
-    if (p_state->type == RAFT_NODE_TYPE_LEADER) {
-      raft_append_entries_args_t args = { 0 };
-      args.term = p_state->p.current_term;
+  if (!p_state->active) {
+    RAFT_LOG(p_state, "INACTIVE");
+    return status;
+  }
+  RAFT_LOG(p_state, "HEARTBEAT");
 
-      for (uint32_t i = 0; i < p_config->node_count - 1; ++i) {
-        if (p_config->p_nodeids[i] != p_state->p.self) {
-          p_config->cb.p_append_entries_rpc(p_config->p_nodeids[i], &args);
-        }
+  raft_config_t const* p_config = p_state->p_config;
+
+  uint32_t next_heartbeat_ms;
+  if (p_state->type == RAFT_NODE_TYPE_LEADER) {
+    raft_append_entries_args_t args = { 0 };
+    args.term = p_state->p.current_term;
+
+    for (uint32_t i = 0; i < p_config->node_count - 1; ++i) {
+      if (p_config->p_nodeids[i] != p_state->p.self) {
+        p_config->cb.p_append_entries_rpc(p_config->p_nodeids[i], &args);
       }
-      usleep(4500 * 1000); // How long between keepalives?
-      continue;
+    }
+
+    next_heartbeat_ms = p_config->leader_ping_interval_ms;
+  } else {
+    if (should_begin_election(p_state)) {
+      if (RAFT_FAILURE(status = begin_election(p_state))) {
+        return status;
+      }
     }
 
     uint32_t range = (p_config->election_timeout_max_ms -
                       p_config->election_timeout_min_ms);
-    uint32_t sleep_ms = (rand() % range) + p_config->election_timeout_min_ms;
-    usleep(1000 * sleep_ms);
-
-    if (should_begin_election(p_state)) {
-      begin_election(p_state);
-    }
+    next_heartbeat_ms = (rand() % range) + p_config->election_timeout_min_ms;
   }
 
-  return NULL;
+  status = (*p_config->cb.p_schedule_event)(p_state,
+                                            next_heartbeat_ms,
+                                            RAFT_EVENT_TYPE_HEARTBEAT);
+
+  return status;
 }

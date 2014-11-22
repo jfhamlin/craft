@@ -1,9 +1,12 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "minunit.h"
+#include "CuTest.h"
+
 #define STB_DEFINE
 #include "stb.h"
+#include "stb_pq.h"
 
 #include "raft_config.h"
 #include "raft.h"
@@ -85,82 +88,33 @@ static event_t* p_events = NULL;
 
 static uint32_t s_time = 0;
 
-/* PRIORITY QUEUE */
-
-#define stb_pq_len stb_arr_len
-#define stb_pq_min(arr) ((arr)[0])
-
-#define stb_pq__par_idx(idx) (((idx) - 1) / 2)
-#define stb_pq__par(arr, idx) ((arr)[stb_pq__par_idx(idx)])
-#define stb_pq__cld(arr, idx, n) ((arr)[2*idx + n + 1])
-
-#define stb_pq_push(arr, val, cmp)                              \
-  do {                                                          \
-    uint32_t idx = stb_pq_len(arr);                             \
-    stb_arr_add(arr);                                           \
-    while (idx > 0 && cmp(&val, &stb_pq__par(arr, idx)) < 0) {  \
-      (arr)[idx] = stb_pq__par(arr, idx);                       \
-      idx = stb_pq__par_idx(idx);                               \
-    }                                                           \
-    (arr)[idx] = val;                                           \
-  } while (0)
-
-#define stb_pq_pop(arr, cmp)                                            \
-  do {                                                                  \
-    uint32_t len = stb_pq_len(arr) - 1;                                 \
-    uint32_t idx = 0;                                                   \
-    while (2*idx + 1 < len) {                                           \
-      if (2*idx + 2 >= len ||                                           \
-          cmp(&stb_pq__cld(arr, idx, 0),                                \
-              &stb_pq__cld(arr, idx, 1)) < 0) {                         \
-        if (cmp(&(arr)[len], &stb_pq__cld(arr, idx, 0)) < 0) break;     \
-        (arr)[idx] = stb_pq__cld(arr, idx, 0);                          \
-        idx = 2*idx+1;                                                  \
-      } else {                                                          \
-        if (cmp(&(arr)[len], &stb_pq__cld(arr, idx, 1)) < 0) break;     \
-        (arr)[idx] = stb_pq__cld(arr, idx, 1);                          \
-        idx = 2*idx + 2;                                                \
-      }                                                                 \
-    }                                                                   \
-    (arr)[idx] = (arr)[len];                                            \
-    stb_arr_pop(arr);                                                   \
-  } while (0)
-
 static int cmp_int(int* p_a, int* p_b) {
   if (*p_a < *p_b) return -1;
   if (*p_a == *p_b) return 0;
   return 1;
 }
 
-static char* test_pq() {
+void Test_priority_queue(CuTest* tc) {
   int const num_count = 3;
   int* p_pq = NULL;
   for (int i = 0; i < num_count; ++i) {
     stb_pq_push(p_pq, i, cmp_int);
   }
-  RAFT_ASSERT_STR(stb_pq_len(p_pq) == num_count,
-                  "(expected) %d != (actual) %d!",
-                  num_count, stb_pq_len(p_pq));
+  CuAssertIntEquals(tc, stb_pq_len(p_pq), num_count);
 
   stb_pq_pop(p_pq, cmp_int);
-  RAFT_ASSERT_STR(stb_pq_len(p_pq) == num_count - 1,
-                  "(expected) %d != (actual) %d!",
-                  num_count - 1, stb_pq_len(p_pq));
+
+  CuAssertIntEquals(tc, stb_pq_len(p_pq), num_count-1);
 
   int v = 0;
   stb_pq_push(p_pq, v, cmp_int);
-  RAFT_ASSERT_STR(stb_pq_len(p_pq) == num_count,
-                  "(expected) %d != (actual) %d!",
-                  num_count, stb_pq_len(p_pq));
+
+  CuAssertIntEquals(tc, stb_pq_len(p_pq), num_count);
 
   for (int i = 0; i < num_count; ++i) {
-    RAFT_ASSERT_STR(i == stb_pq_min(p_pq),
-                    "(expected) %d != (actual) %d!", i, stb_pq_min(p_pq));
-    mu_assert("Better come out in order.",
-              i == stb_pq_min(p_pq));
+    CuAssertIntEquals(tc, stb_pq_min(p_pq), i);
     stb_pq_pop(p_pq, cmp_int);
   }
-  return NULL;
 }
 
 /* EVENT QUEUE */
@@ -279,88 +233,51 @@ void stop_nodes() {
  * TESTS BELOW
  */
 
-static char* test_election() {
+void Test_election(CuTest* tc) {
   start_nodes();
 
-  mu_assert("Nodes may not begin as leaders.", first_leader() == NULL);
+  CuAssertPtrEquals(tc, first_leader(), NULL);
 
   process_events(10);
 
-  mu_assert("Exactly one node must have become the leader.",
-            leader_count() == 1);
+  CuAssertIntEquals(tc, leader_count(), 1);
 
   stop_nodes();
-  return NULL;
 }
 
-static char* test_election_after_leader_failures() {
+void Test_election_after_leader_failures(CuTest* tc) {
   start_nodes();
 
   process_events(10);
-  mu_assert("Exactly one node must have become the leader.",
-            leader_count() == 1);
+  CuAssertIntEquals(tc, 1, leader_count());
 
-  mu_assert("All active nodes should have a heartbeat.",
-            active_node_count() == event_count());
+  CuAssertIntEquals(tc, active_node_count(), event_count());
 
   raft_stop(first_leader());
-  mu_assert("`raft_stop` should demote a leader to a follower.",
-            leader_count() == 0);
+  CuAssertIntEquals(tc, 0, leader_count());
 
   process_events(10);
-  mu_assert("Exactly one node must have become the leader.",
-            leader_count() == 1);
+  CuAssertIntEquals(tc, 1, leader_count());
 
   raft_stop(first_leader());
 
   process_events(10);
-  mu_assert("Exactly one node must have become the leader.",
-            leader_count() == 1);
+  CuAssertIntEquals(tc, 1, leader_count());
 
-  mu_assert("All active nodes should have a heartbeat.",
-            active_node_count() == event_count());
+  CuAssertIntEquals(tc, active_node_count(), event_count());
 
   raft_state_t* p_leader = first_leader();
   raft_stop(p_leader);
 
   process_events(10);
-  mu_assert("No leader should be electable without a majority.",
-            leader_count() == 0);
+  CuAssertIntEquals(tc, 0, leader_count());
 
-  mu_assert("All active nodes should have a heartbeat.",
-            active_node_count() == event_count());
+  CuAssertIntEquals(tc, active_node_count(), event_count());
 
   raft_start(p_leader);
 
   process_events(10);
-  mu_assert("Exactly one node must have become the leader.",
-            leader_count() == 1);
-
-  mu_assert("All active nodes should have a heartbeat.",
-            active_node_count() == event_count());
+  CuAssertIntEquals(tc, 1, leader_count());
 
   stop_nodes();
-  return NULL;
-}
-
-static char * all_tests() {
-  mu_run_test(test_pq);
-  mu_run_test(test_election);
-  mu_run_test(test_election_after_leader_failures);
-  return 0;
-}
-
-int tests_run = 0;
-
-int main(int argc, char **argv) {
-  char *result = all_tests();
-  if (result != 0) {
-    printf("%s\n", result);
-  }
-  else {
-    printf("ALL TESTS PASSED\n");
-  }
-  printf("Tests run: %d\n", tests_run);
-
-  return result != 0;
 }

@@ -4,9 +4,9 @@
 # debug build is the default
 CONFIG=debug
 
-INCDIR = inc
+INCDIRS = inc
 
-CFLAGS = -Wall -I$(INCDIR) -std=c11 # -std=c11 -stdlib=libc
+CFLAGS = -Wall $(addprefix -I,$(INCDIRS)) -std=c11
 
 ifeq ($(CONFIG),debug)
   DBG_CFLAGS = -g -DDEBUG
@@ -66,7 +66,14 @@ raft: $(OBJS) $(OUTDIR)/src/test.o
 
 ### Test targets
 
-test: $(OBJS) $(OUTDIR)/tests/test_main.o
+TEST_FILES = $(wildcard tests/*.c)
+TEST_OBJECT_FILES = $(addprefix $(OUTDIR)/, $(subst .c,.o,$(TEST_FILES)))
+
+test_main.c: $(TEST_FILES)
+	./tests/make-tests.sh "$(TEST_FILES)" > $@
+
+test: INCDIRS += tests
+test: $(OBJS) $(OUTDIR)/test_main.o $(TEST_OBJECT_FILES)
 	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
 	./test 2> /dev/null
 

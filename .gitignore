@@ -18,4 +18,5 @@
 # Outputs
 TAGS
 test
-bin/debug/*
+bin/*
+g_*.c

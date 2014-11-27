@@ -71,11 +71,11 @@ TEST_OBJECT_FILES = $(addprefix $(OUTDIR)/, $(subst .c,.o,$(TEST_FILES)))
 
 include $(patsubst %,$(OUTDIR)/%, $(TEST_FILES:.c=.d))
 
-test_main.c: $(TEST_FILES)
+g_test_main.c: $(TEST_FILES)
 	./tests/make-tests.sh "$(TEST_FILES)" > $@
 
 test: INCDIRS += tests
-test: $(OBJS) $(OUTDIR)/test_main.o $(TEST_OBJECT_FILES)
+test: $(OBJS) $(OUTDIR)/g_test_main.o $(TEST_OBJECT_FILES)
 	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
 	./test 2> /dev/null
 

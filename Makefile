@@ -69,6 +69,8 @@ raft: $(OBJS) $(OUTDIR)/src/test.o
 TEST_FILES = $(wildcard tests/*.c)
 TEST_OBJECT_FILES = $(addprefix $(OUTDIR)/, $(subst .c,.o,$(TEST_FILES)))
 
+include $(patsubst %,$(OUTDIR)/%, $(TEST_FILES:.c=.d))
+
 test_main.c: $(TEST_FILES)
 	./tests/make-tests.sh "$(TEST_FILES)" > $@
 
@@ -80,7 +82,7 @@ test: $(OBJS) $(OUTDIR)/test_main.o $(TEST_OBJECT_FILES)
 #### Clean ####
 
 clean:
-	rm -rf $(OUTDIR_BASE)/* *~ raft raft.dSYM TAGS
+	rm -rf $(OUTDIR_BASE)/* *~ raft raft.dSYM TAGS test
 
 #### flymake helper
 

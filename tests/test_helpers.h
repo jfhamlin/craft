@@ -6,8 +6,9 @@
 #include "stb.h"
 #include "stb_pq.h"
 
-#include "raft_config.h"
 #include "raft.h"
+#include "raft_state.h"
+#include "raft_config.h"
 #include "raft_util.h"
 
 static raft_state_t* s_node_states[NODE_COUNT] = { 0 };

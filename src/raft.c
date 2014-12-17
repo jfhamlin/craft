@@ -3,10 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "raft.h"
+#include "raft_util.h"
+#include "raft_state.h"
 #include "raft_config.h"
 #include "raft_log.h"
-#include "raft_util.h"
 
 static raft_bool_t should_begin_election(raft_state_t* p_state);
 static raft_status_t begin_election(raft_state_t* p_state);

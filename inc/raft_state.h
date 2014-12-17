@@ -46,4 +46,6 @@ typedef struct raft_state {
 
 void raft_state_set_type(raft_state_t* p_state, raft_node_type_t type);
 
+uint32_t raft_state_vote_count(raft_state_t* p_state);
+
 #endif

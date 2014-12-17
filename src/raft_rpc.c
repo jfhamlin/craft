@@ -4,7 +4,7 @@
 #include "raft_state.h"
 #include "raft_util.h"
 
-static raft_status_t raft_promote_to_leader(raft_state_t* p_state);
+static raft_status_t promote_to_leader(raft_state_t* p_state);
 
 raft_status_t
 raft_recv_append_entries(raft_state_t* p_state,
@@ -133,23 +133,18 @@ raft_recv_request_vote_response(raft_state_t* p_state,
   }
 
   /* Record and count votes! */
+
   raft_bool_t* p_ballot = p_state->l.p_ballot;
   p_ballot[p_args->follower_id - 1] = p_args->vote_granted;
 
-  uint32_t sum = 0;
-  for (uint32_t i = 0; i < node_count; ++i) {
-    if (p_ballot[i])
-      ++sum;
-  }
-
-  if (sum > node_count / 2) {
-    raft_promote_to_leader(p_state);
+  if (raft_state_vote_count(p_state) > node_count / 2) {
+    promote_to_leader(p_state);
   }
 
   return RAFT_STATUS_OK;
 }
 
-static raft_status_t raft_promote_to_leader(raft_state_t* p_state) {
+static raft_status_t promote_to_leader(raft_state_t* p_state) {
   RAFT_LOG(p_state, "Leader for term %u.",
            p_state->p.current_term);
 

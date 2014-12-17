@@ -1,7 +1,10 @@
 #ifndef __RAFT_H__
 #define __RAFT_H__
 
-#include "raft_state.h"
+#include "raft_types.h"
+
+typedef struct raft_state raft_state_t;
+typedef struct raft_config raft_config_t;
 
 /**
  *

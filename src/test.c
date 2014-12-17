@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "raft.h"
+#include "raft_state.h"
 #include "raft_config.h"
 #include "raft_log.h"
 #include "raft_rpc.h"

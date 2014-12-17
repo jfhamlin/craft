@@ -237,10 +237,13 @@ void Test_raft_recv_request_vote_While_leader_with_new_term_and_new_log(CuTest* 
   raft_state_t* p_state = make_raft_node(1);                            \
   p_state->type = (node_type);                                          \
   p_state->p.current_term = (term);                                     \
-  if ((node_type) == RAFT_NODE_TYPE_LEADER)                             \
-    p_state->p.voted_for = p_state->p.self
+  if ((node_type) == RAFT_NODE_TYPE_LEADER || (node_type) == RAFT_NODE_TYPE_CANDIDATE) { \
+    p_state->p.voted_for = p_state->p.self;                             \
+    p_state->l.p_ballot[0] = RAFT_TRUE;                                 \
+  }                                                                     \
+  (void)0
 
-void Test_raft_recv_request_vote_response(CuTest* tc) {
+void Test_raft_recv_request_vote_response_with_granted_vote(CuTest* tc) {
   TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_CANDIDATE, 1);
 
   raft_request_vote_response_args_t args = {
@@ -248,6 +251,136 @@ void Test_raft_recv_request_vote_response(CuTest* tc) {
     .term = 1,
     .vote_granted = RAFT_TRUE
   };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_OK, raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, 2, raft_state_vote_count(p_state));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_CANDIDATE, p_state->type);
+
+  STOP_NODES();
+}
+
+void Test_raft_recv_request_vote_response_with_denied_vote(CuTest* tc) {
+  TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_CANDIDATE, 1);
+
+  raft_request_vote_response_args_t args = {
+    .follower_id = 2,
+    .term = 1,
+    .vote_granted = RAFT_FALSE
+  };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_OK, raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, 1, raft_state_vote_count(p_state));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_CANDIDATE, p_state->type);
+
+  STOP_NODES();
+}
+
+void Test_raft_recv_request_vote_response_with_future_term(CuTest* tc) {
+  TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_CANDIDATE, 1);
+
+  raft_request_vote_response_args_t args = {
+    .follower_id = 2,
+    .term = 2,
+    .vote_granted = RAFT_TRUE
+  };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_INVALID_TERM,
+                    raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, 1, raft_state_vote_count(p_state));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_CANDIDATE, p_state->type);
+
+  STOP_NODES();
+}
+
+void Test_raft_recv_request_vote_response_with_past_term(CuTest* tc) {
+  TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_CANDIDATE, 2);
+
+  raft_request_vote_response_args_t args = {
+    .follower_id = 2,
+    .term = 1,
+    .vote_granted = RAFT_TRUE
+  };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_OK,
+                    raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, 1, raft_state_vote_count(p_state));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_CANDIDATE, p_state->type);
+
+  STOP_NODES();
+}
+
+void Test_raft_recv_request_vote_response_with_invalid_state(CuTest* tc) {
+  TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_FOLLOWER, 1);
+
+  raft_request_vote_response_args_t args = {
+    .follower_id = 2,
+    .term = 1,
+    .vote_granted = RAFT_TRUE
+  };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_INVALID_ARGS,
+                    raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, 0, raft_state_vote_count(p_state));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_FOLLOWER, p_state->type);
+
+  STOP_NODES();
+}
+
+void Test_raft_recv_request_vote_response_with_unknown_id(CuTest* tc) {
+  TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_CANDIDATE, 1);
+
+  raft_request_vote_response_args_t args = {
+    .follower_id = 9999,
+    .term = 1,
+    .vote_granted = RAFT_TRUE
+  };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_INVALID_ARGS,
+                    raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, 1, raft_state_vote_count(p_state));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_CANDIDATE, p_state->type);
+
+  STOP_NODES();
+}
+
+void Test_raft_recv_request_vote_response_as_leader(CuTest* tc) {
+  TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_LEADER, 1);
+
+  raft_request_vote_response_args_t args = {
+    .follower_id = 2,
+    .term = 1,
+    .vote_granted = RAFT_TRUE
+  };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_OK,
+                    raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_LEADER, p_state->type);
+
+  STOP_NODES();
+}
+
+void Test_raft_recv_request_vote_leader_promotion(CuTest* tc) {
+  TEST_REQUEST_VOTE_RESPONSE_SETUP(RAFT_NODE_TYPE_CANDIDATE, 1);
+  for (uint32_t i = 3; i <= (p_state->p_config->node_count >> 1) + 1; ++i) {
+    p_state->l.p_ballot[i-1] = RAFT_TRUE;
+  }
+
+  CuAssertIntEquals(tc, (p_state->p_config->node_count >> 1),
+                    raft_state_vote_count(p_state));
+
+  raft_request_vote_response_args_t args = {
+    .follower_id = 2,
+    .term = 1,
+    .vote_granted = RAFT_TRUE
+  };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_OK,
+                    raft_recv_request_vote_response(p_state, &args));
+  CuAssertIntEquals(tc, (p_state->p_config->node_count >> 1) + 1,
+                    raft_state_vote_count(p_state));
+  CuAssertIntEquals(tc, RAFT_NODE_TYPE_LEADER, p_state->type);
+
+  CuFail(tc, "PENDING: Check that leader assertion messages are enqueued!");
 
   STOP_NODES();
 }

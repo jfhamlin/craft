@@ -17,6 +17,7 @@
 
 # Outputs
 TAGS
+raft
 test
 bin/*
 g_*.c

@@ -1,5 +1,3 @@
-#pragma clang diagnostic ignored "-Wunused-function"
-
 #include "CuTest.h"
 
 #include "raft_rpc.h"

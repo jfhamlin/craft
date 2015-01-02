@@ -20,8 +20,6 @@ else
   OPTFLAGS = -O3
 endif
 
-CC=clang
-
 PYTHON=python
 
 .PHONY: clean test debug

@@ -1,6 +1,8 @@
 #ifndef __TEST_HELPERS_H__
 #define __TEST_HELPERS_H__
 
+#pragma clang diagnostic ignored "-Wunused-function"
+
 #include <stdlib.h>
 
 #include "stb.h"
@@ -63,6 +65,15 @@ request_vote_response_rpc(raft_nodeid_t id,
                           raft_request_vote_response_args_t* args) {
   if (!s_node_states[id - 1]) return RAFT_STATUS_OK;
   return raft_recv_request_vote_response(s_node_states[id - 1], args);
+}
+
+static
+raft_status_t
+send_message_callback(raft_nodeid_t id,
+                      void* p_msg,
+                      uint32_t message_size) {
+  if (!s_node_states[id - 1]) return RAFT_STATUS_OK;
+  return raft_recv_message(s_node_states[id - 1], p_msg, message_size);
 }
 
 typedef struct {
@@ -170,8 +181,10 @@ static raft_state_t* make_raft_node(uint32_t id) {
 
   p_config->cb.pf_append_entries_rpc =          &append_entries_rpc;
   p_config->cb.pf_append_entries_response_rpc = &append_entries_response_rpc;
-  p_config->cb.pf_request_vote_rpc =            &request_vote_rpc;
+  //p_config->cb.pf_request_vote_rpc =            &request_vote_rpc;
   p_config->cb.pf_request_vote_response_rpc =   &request_vote_response_rpc;
+
+  p_config->cb.pf_send_message = &send_message_callback;
 
   raft_state_t* p_state = NULL;
   raft_alloc(&p_state, p_config);

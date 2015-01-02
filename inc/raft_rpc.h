@@ -9,7 +9,9 @@ typedef struct raft_log raft_log_t;
 /**
  *
  */
-raft_status_t raft_receive_message(void* p_message_bytes, uint32_t buffer_size);
+raft_status_t raft_recv_message(raft_state_t* p_state,
+                                void* p_message_bytes,
+                                uint32_t buffer_size);
 
 typedef struct {
   raft_term_t        term;

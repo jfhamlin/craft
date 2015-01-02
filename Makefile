@@ -59,7 +59,7 @@ $(OUTDIR)/%.o: %.c
 
 #### Concrete Target Rules ####
 
-raft: $(OBJS) $(OUTDIR)/src/test.o
+raft: $(OBJS)
 	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
 
 ### Test targets

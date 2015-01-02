@@ -40,7 +40,7 @@ endif
 SRCDIR = src
 
 SRCS = src/raft_state.c src/raft.c src/raft_rpc.c src/raft_log.c \
-	src/raft_util.c
+	src/raft_util.c src/raft_wire.c
 
 OBJS = $(patsubst %,$(OUTDIR)/%, $(SRCS:.c=.o))
 

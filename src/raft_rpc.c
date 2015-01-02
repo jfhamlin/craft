@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "raft_rpc.h"
 #include "raft_log.h"
 #include "raft_config.h"
@@ -5,6 +7,16 @@
 #include "raft_util.h"
 
 static raft_status_t promote_to_leader(raft_state_t* p_state);
+
+static void on_leader_ping(raft_state_t* p_state) {
+  raft_config_t* p_config = p_state->p_config;
+
+  p_state->v.ms_since_last_leader_ping = 0;
+  uint32_t range = (p_config->election_timeout_max_ms -
+                    p_config->election_timeout_min_ms);
+  p_state->v.election_timeout_ms = ((rand() % range) +
+                                    p_config->election_timeout_min_ms);
+}
 
 raft_status_t
 raft_recv_append_entries(raft_state_t* p_state,
@@ -26,7 +38,7 @@ raft_recv_append_entries(raft_state_t* p_state,
     return RAFT_STATUS_INVALID_ARGS;
   }
 
-  p_state->v.heard_from_leader = RAFT_TRUE;
+  on_leader_ping(p_state);
 
   raft_log_entry_t const* p_prev_entry;
   p_prev_entry = raft_log_entry(p_log, p_args->prev_log_index);
@@ -94,7 +106,7 @@ raft_recv_request_vote(raft_state_t* p_state,
 
 respond:
 
-  p_state->p_config->cb.p_request_vote_response_rpc(
+  p_state->p_config->cb.pf_request_vote_response_rpc(
       p_args->candidate_id, &response);
 
   return RAFT_STATUS_OK;

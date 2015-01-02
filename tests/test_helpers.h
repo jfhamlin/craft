@@ -13,27 +13,23 @@
 
 static raft_state_t* s_node_states[NODE_COUNT] = { 0 };
 
-static raft_state_t* first_leader() {
-  for (uint32_t ii = 0; ii < NODE_COUNT; ++ii) {
-    if (s_node_states[ii]->type == RAFT_NODE_TYPE_LEADER)
-      return s_node_states[ii];
+static raft_state_t* get_node(uint32_t i) {
+  if (i >= NODE_COUNT) return NULL;
+  return s_node_states[i];
+}
+
+static int32_t first_leader() {
+  for (int32_t ii = 0; ii < NODE_COUNT; ++ii) {
+    if (s_node_states[ii] && s_node_states[ii]->type == RAFT_NODE_TYPE_LEADER)
+      return ii;
   }
-  return NULL;
+  return -1;
 }
 
 static uint32_t leader_count() {
   uint32_t count = 0;
   for (uint32_t ii = 0; ii < NODE_COUNT; ++ii) {
-    if (s_node_states[ii]->type == RAFT_NODE_TYPE_LEADER)
-      ++count;
-  }
-  return count;
-}
-
-static uint32_t active_node_count() {
-  uint32_t count = 0;
-  for (uint32_t ii = 0; ii < NODE_COUNT; ++ii) {
-    if (s_node_states[ii]->active)
+    if (s_node_states[ii] && s_node_states[ii]->type == RAFT_NODE_TYPE_LEADER)
       ++count;
   }
   return count;
@@ -42,7 +38,7 @@ static uint32_t active_node_count() {
 static
 raft_status_t
 append_entries_rpc(raft_nodeid_t id, raft_append_entries_args_t* args) {
-  if (!s_node_states[id - 1]->active) return RAFT_STATUS_OK;
+  if (!s_node_states[id - 1]) return RAFT_STATUS_OK;
   return raft_recv_append_entries(s_node_states[id - 1], args);
 }
 
@@ -50,14 +46,14 @@ static
 raft_status_t
 append_entries_response_rpc(raft_nodeid_t id,
                             raft_append_entries_response_args_t* args) {
-  if (!s_node_states[id - 1]->active) return RAFT_STATUS_OK;
+  if (!s_node_states[id - 1]) return RAFT_STATUS_OK;
   return raft_recv_append_entries_response(s_node_states[id - 1], args);
 }
 
 static
 raft_status_t
 request_vote_rpc(raft_nodeid_t id, raft_request_vote_args_t* args) {
-  if (!s_node_states[id - 1]->active) return RAFT_STATUS_OK;
+  if (!s_node_states[id - 1]) return RAFT_STATUS_OK;
   return raft_recv_request_vote(s_node_states[id - 1], args);
 }
 
@@ -65,14 +61,21 @@ static
 raft_status_t
 request_vote_response_rpc(raft_nodeid_t id,
                           raft_request_vote_response_args_t* args) {
-  if (!s_node_states[id - 1]->active) return RAFT_STATUS_OK;
+  if (!s_node_states[id - 1]) return RAFT_STATUS_OK;
   return raft_recv_request_vote_response(s_node_states[id - 1], args);
 }
 
 typedef struct {
-  raft_state_t* p_state;
+  raft_nodeid_t node_id;
   uint32_t time;
-  raft_event_type_t type;
+
+  enum {
+    EVENT_TYPE_TICK
+  } type;
+
+  union {
+    uint32_t elapsed_ms;
+  };
 } event_t;
 
 static int event_cmp(event_t* p_a, event_t* p_b) {
@@ -93,30 +96,15 @@ static int cmp_int(int* p_a, int* p_b) {
 
 /* EVENT QUEUE */
 
-static
-raft_status_t
-schedule_event(raft_state_t* p_state,
-               uint32_t ms_from_now,
-               raft_event_type_t event_type) {
-  //printf("scheduling (%llu, %u)...\n", p_state, s_time+ms_from_now);
-  event_t event = {
-    .p_state = p_state,
-    .time = s_time + ms_from_now,
-    .type = event_type
-  };
+static void schedule_event(raft_nodeid_t node_id,
+                           uint32_t ms_from_now,
+                           event_t event) {
+  //printf("scheduling (id: %llu, ms: %u)...\n", node_id, s_time+ms_from_now);
+
+  event.node_id = node_id;
+  event.time = s_time + ms_from_now;
+
   stb_pq_push(p_events, event, event_cmp);
-
-  for (uint32_t ii = 0; ii < NODE_COUNT; ++ii) {
-    if (!s_node_states[ii]->active) continue;
-    raft_bool_t found_heartbeat = RAFT_FALSE;
-    for (uint32_t jj = 0; jj < stb_pq_len(p_events); ++jj) {
-      if (p_events[jj].p_state == s_node_states[ii])
-        found_heartbeat = RAFT_TRUE;
-    }
-    RAFT_ASSERT_STR(found_heartbeat, "Missing heartbeat for %u", ii+1);
-  }
-
-  return RAFT_STATUS_OK;
 }
 
 static uint32_t event_count() {
@@ -128,22 +116,27 @@ static void process_event() {
   stb_pq_pop(p_events, event_cmp);
   s_time = next.time;
 
-  //printf("processing %llu...\n", next.p_state);
+  //printf("processing %llu...\n", next.node_id);
 
-  if (RAFT_FAILURE(raft_receive_event(next.p_state, next.type))) {
-    RAFT_ASSERT_STR(RAFT_FALSE, "Heartbeat failure.");
+  raft_state_t* p_state = get_node(next.node_id);
+  if (p_state == NULL) {
+    return;
   }
 
-  RAFT_ASSERT_STR(active_node_count() <= event_count(), "Missing heartbeat");
-
-  for (uint32_t ii = 0; ii < NODE_COUNT; ++ii) {
-    if (!s_node_states[ii]->active) continue;
-    raft_bool_t found_heartbeat = RAFT_FALSE;
-    for (uint32_t jj = 0; jj < stb_pq_len(p_events); ++jj) {
-      if (p_events[jj].p_state == s_node_states[ii])
-        found_heartbeat = RAFT_TRUE;
+  switch (next.type) {
+    case EVENT_TYPE_TICK:
+    {
+      uint32_t next_tick_ms;
+      raft_tick(&next_tick_ms, p_state, next.elapsed_ms);
+      next.elapsed_ms = next_tick_ms;
+      schedule_event(next.node_id, next_tick_ms, next);
+      break;
     }
-    RAFT_ASSERT_STR(found_heartbeat, "Missing heartbeat for %u", ii+1);
+    default:
+    {
+      RAFT_ASSERT(RAFT_FALSE);
+      break;
+    }
   }
 }
 
@@ -175,33 +168,38 @@ static raft_state_t* make_raft_node(uint32_t id) {
   p_config->election_timeout_max_ms = 1000;
   p_config->election_timeout_min_ms = 500;
 
-  p_config->cb.p_append_entries_rpc =          &append_entries_rpc;
-  p_config->cb.p_append_entries_response_rpc = &append_entries_response_rpc;
-  p_config->cb.p_request_vote_rpc =            &request_vote_rpc;
-  p_config->cb.p_request_vote_response_rpc =   &request_vote_response_rpc;
-  p_config->cb.p_schedule_event =              &schedule_event;
+  p_config->cb.pf_append_entries_rpc =          &append_entries_rpc;
+  p_config->cb.pf_append_entries_response_rpc = &append_entries_response_rpc;
+  p_config->cb.pf_request_vote_rpc =            &request_vote_rpc;
+  p_config->cb.pf_request_vote_response_rpc =   &request_vote_response_rpc;
 
   raft_state_t* p_state = NULL;
-  raft_init(&p_state, p_config);
+  raft_alloc(&p_state, p_config);
   return p_state;
 }
 
 static void start_nodes() {
   for (uint32_t i = 0; i < NODE_COUNT; ++i) {
     s_node_states[i] = make_raft_node(i + 1);
+
+    event_t event = {
+      .type = EVENT_TYPE_TICK,
+      .elapsed_ms = 0
+    };
+    schedule_event(i, 0, event);
   }
-  for (uint32_t i = 0; i < NODE_COUNT; ++i) {
-    raft_start(s_node_states[i]);
+}
+
+static void stop_node(uint32_t i) {
+  if (s_node_states[i]) {
+    raft_free(s_node_states[i]);
+    s_node_states[i] = NULL;
   }
 }
 
 static void stop_nodes() {
   for (uint32_t i = 0; i < NODE_COUNT; ++i) {
-    if (s_node_states[i]) {
-      raft_stop(s_node_states[i]);
-      raft_deinit(s_node_states[i]);
-    }
-    s_node_states[i] = 0;
+    stop_node(i);
   }
 }
 

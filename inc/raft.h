@@ -1,35 +1,27 @@
 #ifndef __RAFT_H__
 #define __RAFT_H__
 
-#include "raft_types.h"
+#include "raft_config.h"
+#include "raft_rpc.h"
 
 typedef struct raft_state raft_state_t;
-typedef struct raft_config raft_config_t;
 
 /**
  *
  */
-raft_status_t raft_init(raft_state_t** pp_state, raft_config_t* p_config);
+raft_status_t raft_alloc(raft_state_t** pp_state, raft_config_t* p_config);
 
 /**
  *
  */
-void raft_deinit(raft_state_t* p_state);
+void raft_free(raft_state_t* p_state);
 
 /**
  *
  */
-raft_status_t raft_start(raft_state_t* p_state);
-
-/**
- *
- */
-raft_status_t raft_stop(raft_state_t* p_state);
-
-/**
- *
- */
-raft_status_t raft_receive_event(raft_state_t* p_state, raft_event_type_t type);
+raft_status_t raft_tick(uint32_t* p_reschedule_ms,
+                        raft_state_t* p_state,
+                        uint32_t elapsed_ms);
 
 /**
  *

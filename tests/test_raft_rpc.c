@@ -1,3 +1,5 @@
+#pragma clang diagnostic ignored "-Wunused-function"
+
 #include "CuTest.h"
 
 #include "raft_rpc.h"
@@ -27,7 +29,7 @@ static raft_status_t save_request_vote_response_rpc(
   p_state->p.current_term = (term);                                     \
   if ((node_type) == RAFT_NODE_TYPE_LEADER)                             \
     p_state->p.voted_for = p_state->p.self;                             \
-  p_state->p_config->cb.p_request_vote_response_rpc = save_request_vote_response_rpc
+  p_state->p_config->cb.pf_request_vote_response_rpc = save_request_vote_response_rpc
 
 void Test_raft_recv_request_vote_With_new_term(CuTest* tc) {
   TEST_REQUEST_VOTE_SETUP(RAFT_NODE_TYPE_FOLLOWER, 0);

@@ -61,10 +61,10 @@ raft_state_t* make_raft_state(uint32_t id) {
   p_config->election_timeout_max_ms = 5000;
   p_config->election_timeout_min_ms = 4000;
 
-  p_config->cb.p_append_entries_rpc =          &append_entries_rpc;
-  p_config->cb.p_append_entries_response_rpc = &append_entries_response_rpc;
-  p_config->cb.p_request_vote_rpc =            &request_vote_rpc;
-  p_config->cb.p_request_vote_response_rpc =   &request_vote_response_rpc;
+  p_config->cb.pf_append_entries_rpc =          &append_entries_rpc;
+  p_config->cb.pf_append_entries_response_rpc = &append_entries_response_rpc;
+  p_config->cb.pf_request_vote_rpc =            &request_vote_rpc;
+  p_config->cb.pf_request_vote_response_rpc =   &request_vote_response_rpc;
 
   uint32_t const ballot_size = NODE_COUNT * sizeof(raft_bool_t);
   p_state->l.p_ballot = calloc(1, ballot_size);
@@ -77,10 +77,6 @@ int main(int argc, char** argv) {
   memset(&states[0], 0, sizeof(states));
   for (uint32_t i = 0; i < NODE_COUNT; ++i) {
     states[i] = make_raft_state(i + 1);
-  }
-
-  for (uint32_t i = 0; i < NODE_COUNT; ++i) {
-    raft_start(states[i]);
   }
 
   for (;;);

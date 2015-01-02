@@ -73,6 +73,8 @@ raft_log_entry_t const* raft_log_entry(raft_log_t const* p_log, int32_t index) {
 }
 
 raft_status_t raft_log_append(raft_log_t* p_log, raft_log_t* p_entries) {
-  RAFT_ASSERT(RAFT_FALSE);
+  if (p_entries) {
+    RAFT_ASSERT(RAFT_FALSE);
+  }
   return RAFT_STATUS_OK;
 }

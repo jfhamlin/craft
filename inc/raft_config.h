@@ -15,8 +15,6 @@ typedef struct raft_config {
 
   uint32_t election_timeout_max_ms;
   uint32_t election_timeout_min_ms;
-
-  uint32_t concurrency;
 } raft_config_t;
 
 #endif

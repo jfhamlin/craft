@@ -1,8 +1,9 @@
 #ifndef __RAFT_UTIL_H__
 #define __RAFT_UTIL_H__
 
-#include <stdio.h>
 #include <assert.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "raft_types.h"
 
@@ -30,6 +31,8 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+#define RAFT_LSBYTE(val, idx) (((val) >> (8*(idx))) % 0xff)
 
 void raft_sleep(uint32_t ms);
 

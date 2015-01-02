@@ -34,11 +34,11 @@ void Test_priority_queue(CuTest* tc) {
 void Test_election(CuTest* tc) {
   start_nodes();
 
-  CuAssertPtrEquals(tc, first_leader(), NULL);
+  CuAssertPtrEquals(tc, get_node(first_leader()), NULL);
 
   process_events(10);
 
-  CuAssertIntEquals(tc, leader_count(), 1);
+  CuAssertIntEquals(tc, 1, leader_count());
 
   STOP_NODES();
 }
@@ -49,33 +49,21 @@ void Test_election_after_leader_failures(CuTest* tc) {
   process_events(10);
   CuAssertIntEquals(tc, 1, leader_count());
 
-  CuAssertIntEquals(tc, active_node_count(), event_count());
-
-  raft_stop(first_leader());
+  stop_node(first_leader());
   CuAssertIntEquals(tc, 0, leader_count());
 
   process_events(10);
   CuAssertIntEquals(tc, 1, leader_count());
 
-  raft_stop(first_leader());
+  stop_node(first_leader());
 
   process_events(10);
   CuAssertIntEquals(tc, 1, leader_count());
 
-  CuAssertIntEquals(tc, active_node_count(), event_count());
-
-  raft_state_t* p_leader = first_leader();
-  raft_stop(p_leader);
+  stop_node(first_leader());
 
   process_events(10);
   CuAssertIntEquals(tc, 0, leader_count());
-
-  CuAssertIntEquals(tc, active_node_count(), event_count());
-
-  raft_start(p_leader);
-
-  process_events(10);
-  CuAssertIntEquals(tc, 1, leader_count());
 
   STOP_NODES();
 }

@@ -2,6 +2,7 @@
 
 #include "raft_wire.h"
 #include "raft_util.h"
+#include "raft_log.h"
 
 void raft_dealloc_envelope(raft_envelope_t* p_envelope) {
   free(p_envelope->p_message);
@@ -13,17 +14,34 @@ void raft_dealloc_envelope(raft_envelope_t* p_envelope) {
  * All multibyte values are encoded in network (big-endian) order.
  *
  * Bytes | Semantics
- * =======================================
+ * =============================================================================
  *   0-2 | Magic Number                   -| Message
  *     3 | Message Type                    | Header
  *   4-7 | Message Size (from byte 0)     -|
  * - - - - - - - - - - - - - - - - - - - - -
- *   8-* | Constant-length message fields
- *       | (Type-dependent)
- * - - - - - - - - - - - - - - - - - - - - -
- *    *  | Log entry data (AppendEntries only)
- * =======================================
+ *   8-* | Constant-length message fields -|
+ *       | (Type-dependent)               -|
+ * ========================================
+ *       | Entry 0 Metadata               -|
+ * - - - - - - - - - - - - - - - - - - - - | Log entry metadata
+ *       | Entry 1 Metadata                | 8-byte entries
+ * - - - - - - - - - - - - - - - - - - - - | (entry type, size,
+ *         ...                             |  and unique id)
+ * - - - - - - - - - - - - - - - - - - - - |
+ *       | Entry n Metadata                |
+ * ========================================|
+ *       | Entry 0 data                    | Variable-length
+ *       |     ...                         | log entry data
+ * - - - - - - - - - - - - - - - - - - - - |
+ *       | Entry 1 data                    |
+ *       |     ...                         |
+ * - - - - - - - - - - - - - - - - - - - - |
+ *       | Entry n data                    |
+ *       |     ...                        -|
+ * =============================================================================
  */
+
+#define RAFT_MSG_HEADER_SIZE 8
 
 #define RAFT_MSG_VERSION 0x000001
 #define RAFT_MSG_VERSION_BYTE(idx) RAFT_LSBYTE(RAFT_MSG_VERSION, idx)
@@ -49,7 +67,7 @@ static uint8_t const* read(uint32_t* p_v, uint8_t const* p_b) {
 
 static uint32_t a_message_sizes[] = {
   0, /* UNKNOWN */
-  0, /* UNKNOWN */
+  32, /* MSG_TYPE_APPEND_ENTRIES */
   0, /* UNKNOWN */
   24, /* MSG_TYPE_REQUEST_VOTE */
   20, /* MSG_TYPE_REQUEST_VOTE_RESPONSE */
@@ -57,8 +75,8 @@ static uint32_t a_message_sizes[] = {
 
 #define MESSAGE_SIZE(_type) a_message_sizes[(_type)]
 
-/* AM: append to message */
-#define AM_SETUP(_type)                                                 \
+/* WM: write to message */
+#define WM_SETUP(_type, _dynamic_data_size)                             \
   uint8_t* p_buf = p_env->p_message;                                    \
   do {                                                                  \
     p_env->recipient_id = recipient_id;                                 \
@@ -71,7 +89,7 @@ static uint32_t a_message_sizes[] = {
         return RAFT_STATUS_OUT_OF_MEMORY;                               \
       p_env->buffer_capacity = capacity;                                \
     }                                                                   \
-    p_env->message_size = MESSAGE_SIZE(_type);                          \
+    p_env->message_size = MESSAGE_SIZE(_type) + (_dynamic_data_size);   \
     (*p_buf++) = RAFT_MSG_VERSION_BYTE(2);                              \
     (*p_buf++) = RAFT_MSG_VERSION_BYTE(1);                              \
     (*p_buf++) = RAFT_MSG_VERSION_BYTE(0);                              \
@@ -82,13 +100,39 @@ static uint32_t a_message_sizes[] = {
     (*p_buf++) = RAFT_LSBYTE(p_env->message_size, 0);                   \
   } while (0)
 
-#define AM(_member_name)                                                \
+#define WM_IMMU32(_value)                                               \
   do {                                                                  \
-    p_buf = write(p_buf, p_args->_member_name);                         \
+    RAFT_ASSERT(p_buf - p_env->p_message <= p_env->message_size - 4);   \
+    p_buf = write(p_buf, (_value));                                     \
   } while (0)
 
-/* AM: Read message */
-#define RM_SETUP uint8_t const* p_buf = p_message_bytes + 8
+#define WM(_member_name)                                                \
+  do {                                                                  \
+    uint8_t _unused[sizeof(p_args->_member_name) == sizeof(uint32_t) ?  \
+                    1 : -1];                                            \
+    (void)_unused;                                                      \
+    WM_IMMU32(p_args->_member_name);                                    \
+  } while (0)
+
+#define WM_BOOL(_member_name)                                           \
+  do {                                                                  \
+    uint8_t _unused[sizeof(p_args->_member_name) ==                     \
+                    sizeof(raft_bool_t) ? 1 : -1];                      \
+    (void)_unused;                                                      \
+    uint32_t v = (p_args->_member_name) ? 1 : 0;                        \
+    WM_IMMU32(v);                                                       \
+  } while (0)
+
+#define WM_BYTES(_p_bytes, _size)                                       \
+  do {                                                                  \
+    RAFT_ASSERT(p_buf - p_env->p_message <=                             \
+                p_env->message_size - (_size));                         \
+    memcpy(p_buf, (_p_bytes), (_size));                                 \
+    p_buf = p_buf + (_size);                                            \
+  } while (0)
+
+/* RM: Read from message */
+#define RM_SETUP uint8_t const* p_buf = p_message_bytes + RAFT_MSG_HEADER_SIZE
 
 #define RM(_member_name)                                                \
   do {                                                                  \
@@ -114,15 +158,61 @@ static uint32_t a_message_sizes[] = {
  *******************************************************************************
  ******************************************************************************/
 
+static uint32_t raft_log_message_byte_count(raft_log_t const* p_log) {
+  if (p_log == NULL)
+    return 0;
+
+  uint32_t const num_entries = raft_log_length(p_log);
+  uint32_t result = 0;
+  for (uint32_t ii = 0; ii < num_entries; ++ii) {
+    result += 12 + raft_log_entry(p_log, (int32_t)ii)->data_size;
+  }
+  return result;
+}
+
+raft_status_t raft_write_append_entries_envelope(
+    raft_envelope_t* p_env,
+    raft_nodeid_t recipient_id,
+    raft_append_entries_args_t const* p_args) {
+  raft_log_t const* p_log = p_args->p_log_entries;
+  uint32_t const num_entries = p_log ? raft_log_length(p_log) : 0;
+
+  WM_SETUP(MSG_TYPE_APPEND_ENTRIES, raft_log_message_byte_count(p_log));
+  WM(term);
+  WM(leader_id);
+  WM(prev_log_index);
+  WM(prev_log_term);
+  WM_IMMU32(num_entries);
+  WM(leader_commit);
+
+  // TODO: Defer to the client about how to marshall the log entry data.
+  //       For now, just copy the bytes directly.
+  for (uint32_t ii = 0; ii < num_entries; ++ii) {
+    raft_log_entry_t const* p_entry = raft_log_entry(p_log, (int32_t)ii);
+    uint32_t size_and_type = p_entry->data_size;
+    size_and_type |= p_entry->type << 31;
+    WM_IMMU32(size_and_type);
+    WM_IMMU32(p_entry->unique_id);
+    WM_IMMU32(p_entry->term);
+  }
+
+  for (uint32_t ii = 0; ii < num_entries; ++ii) {
+    raft_log_entry_t const* p_entry = raft_log_entry(p_log, (int32_t)ii);
+    WM_BYTES(p_entry->p_data, p_entry->data_size);
+  }
+
+  return RAFT_STATUS_OK;
+}
+
 raft_status_t raft_write_request_vote_envelope(
     raft_envelope_t* p_env,
     raft_nodeid_t recipient_id,
     raft_request_vote_args_t const* p_args) {
-  AM_SETUP(MSG_TYPE_REQUEST_VOTE);
-  AM(term);
-  AM(candidate_id);
-  AM(last_log_index);
-  AM(last_log_term);
+  WM_SETUP(MSG_TYPE_REQUEST_VOTE, 0);
+  WM(term);
+  WM(candidate_id);
+  WM(last_log_index);
+  WM(last_log_term);
 
   return RAFT_STATUS_OK;
 }
@@ -131,10 +221,10 @@ raft_status_t raft_write_request_vote_response_envelope(
     raft_envelope_t* p_env,
     raft_nodeid_t recipient_id,
     raft_request_vote_response_args_t const* p_args) {
-  AM_SETUP(MSG_TYPE_REQUEST_VOTE_RESPONSE);
-  AM(follower_id);
-  AM(term);
-  AM(vote_granted);
+  WM_SETUP(MSG_TYPE_REQUEST_VOTE_RESPONSE, 0);
+  WM(follower_id);
+  WM(term);
+  WM_BOOL(vote_granted);
 
   return RAFT_STATUS_OK;
 }

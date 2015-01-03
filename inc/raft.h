@@ -26,6 +26,9 @@ raft_status_t raft_tick(uint32_t* p_reschedule_ms,
 /**
  *
  */
-//raft_status_t raft_append(raft_user_entry_t* p_entry);
+raft_status_t raft_append(raft_state_t* p_state,
+                          uint32_t unique_id,
+                          void* p_data,
+                          uint32_t data_size);
 
 #endif

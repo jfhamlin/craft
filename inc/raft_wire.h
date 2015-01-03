@@ -18,16 +18,10 @@ typedef struct {
   uint8_t* p_message;
 } raft_envelope_t;
 
-/**
- *
- */
-// void raft_write_append_entries_envelope(
-//     raft_envelope_t* p_envelope,
-//     raft_nodeid_t node_id,
-//     raft_append_entries_args_t const* p_args);
-// void raft_write_append_entries_response(raft_envelope_t* p_envelope,
-//                          raft_nodeid_t node_id,
-//                          raft_append_entries_response_args_t const* p_args);
+raft_status_t raft_write_append_entries_envelope(
+    raft_envelope_t* p_env,
+    raft_nodeid_t recipient_id,
+    raft_append_entries_args_t const* p_args);
 raft_status_t raft_write_request_vote_envelope(
     raft_envelope_t* p_envelope,
     raft_nodeid_t node_id,

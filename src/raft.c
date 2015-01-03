@@ -28,7 +28,7 @@ raft_status_t raft_alloc(raft_state_t** pp_state, raft_config_t* p_config) {
   /**
    * Create the log.
    */
-  raft_log_t* p_log = p_state->p.p_log = raft_log_create();
+  raft_log_t* p_log = p_state->p.p_log = raft_log_alloc();
   if (p_log == NULL) {
     free(p_state);
     return RAFT_STATUS_OUT_OF_MEMORY;

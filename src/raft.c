@@ -9,6 +9,7 @@
 
 static raft_bool_t should_begin_election(raft_state_t* p_state);
 static raft_status_t begin_election(raft_state_t* p_state);
+
 static raft_status_t send_request_vote(raft_state_t* p_state,
                                        raft_nodeid_t recipient_id,
                                        raft_request_vote_args_t* p_args);
@@ -114,9 +115,7 @@ raft_status_t raft_tick(uint32_t* p_reschedule_ms,
 }
 
 /*******************************************************************************
- *******************************************************************************
- *******************************************************************************
- *******************************************************************************
+ ******************************** Elections ************************************
  ******************************************************************************/
 
 static raft_status_t begin_election(raft_state_t* p_state) {
@@ -164,6 +163,10 @@ static raft_bool_t should_begin_election(raft_state_t* p_state) {
 
   return p_state->v.ms_since_last_leader_ping >= p_state->v.election_timeout_ms;
 }
+
+/*******************************************************************************
+ *******************************************************************************
+ ******************************************************************************/
 
 static raft_status_t send_request_vote(raft_state_t* p_state,
                                        raft_nodeid_t recipient_id,

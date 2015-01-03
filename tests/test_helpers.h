@@ -181,8 +181,9 @@ static raft_state_t* make_raft_node(uint32_t id) {
 
   p_config->cb.pf_append_entries_rpc =          &append_entries_rpc;
   p_config->cb.pf_append_entries_response_rpc = &append_entries_response_rpc;
-  //p_config->cb.pf_request_vote_rpc =            &request_vote_rpc;
-  p_config->cb.pf_request_vote_response_rpc =   &request_vote_response_rpc;
+
+  /* p_config->cb.pf_request_vote_rpc =          &request_vote_rpc; */
+  /* p_config->cb.pf_request_vote_response_rpc = &request_vote_response_rpc; */
 
   p_config->cb.pf_send_message = &send_message_callback;
 

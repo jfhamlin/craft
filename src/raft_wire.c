@@ -3,6 +3,11 @@
 #include "raft_wire.h"
 #include "raft_util.h"
 
+void raft_dealloc_envelope(raft_envelope_t* p_envelope) {
+  free(p_envelope->p_message);
+  memset(p_envelope, 0, sizeof(*p_envelope));
+}
+
 /**
  * The following describes the wire format for raft messages.
  * All multibyte values are encoded in network (big-endian) order.
@@ -19,6 +24,11 @@
  *    *  | Log entry data (AppendEntries only)
  * =======================================
  */
+
+#define RAFT_MSG_VERSION 0x000001
+#define RAFT_MSG_VERSION_BYTE(idx) RAFT_LSBYTE(RAFT_MSG_VERSION, idx)
+
+#define MESSAGE_BUFFER_SIZE_ALIGN 0x100
 
 static uint8_t* write(uint8_t* p_b, uint32_t v) {
   (*p_b++) = (v >> 24) & 0xfF;
@@ -37,19 +47,21 @@ static uint8_t const* read(uint32_t* p_v, uint8_t const* p_b) {
   return p_b;
 }
 
-#define RAFT_MSG_VERSION 0x000001
-#define RAFT_MSG_VERSION_BYTE(idx) RAFT_LSBYTE(RAFT_MSG_VERSION, idx)
+static uint32_t a_message_sizes[] = {
+  0, /* UNKNOWN */
+  0, /* UNKNOWN */
+  0, /* UNKNOWN */
+  24, /* MSG_TYPE_REQUEST_VOTE */
+  20, /* MSG_TYPE_REQUEST_VOTE_RESPONSE */
+};
 
-#define MESSAGE_BUFFER_SIZE_ALIGN 0x100
-
-#define MESSAGE_SIZE(_type)                                             \
-  (((_type) == MSG_TYPE_REQUEST_VOTE) ? 24 :                            \
-   ((_type) == MSG_TYPE_REQUEST_VOTE_RESPONSE) ? 0 : 0/*TODO: error here*/)
+#define MESSAGE_SIZE(_type) a_message_sizes[(_type)]
 
 /* AM: append to message */
 #define AM_SETUP(_type)                                                 \
   uint8_t* p_buf = p_env->p_message;                                    \
   do {                                                                  \
+    p_env->recipient_id = recipient_id;                                 \
     if (p_buf == NULL ||                                                \
         p_env->buffer_capacity < MESSAGE_SIZE(_type)) {                 \
       uint32_t capacity = RAFT_ALIGN_UP(MESSAGE_SIZE(_type),            \
@@ -87,12 +99,25 @@ static uint8_t const* read(uint32_t* p_v, uint8_t const* p_b) {
     message_size -= 4;                                                  \
   } while (0)
 
+#define RM_BOOL(_member_name)                                           \
+  do {                                                                  \
+    if (message_size <= 3) {                                            \
+      return RAFT_STATUS_INVALID_MESSAGE;                               \
+    }                                                                   \
+    uint32_t v;                                                         \
+    p_buf = read(&v, p_buf);                                            \
+    p_args->_member_name = v ? RAFT_TRUE : RAFT_FALSE;                  \
+    message_size -= 4;                                                  \
+  } while (0)
+
+/*******************************************************************************
+ *******************************************************************************
+ ******************************************************************************/
+
 raft_status_t raft_write_request_vote_envelope(
     raft_envelope_t* p_env,
     raft_nodeid_t recipient_id,
     raft_request_vote_args_t const* p_args) {
-  p_env->recipient_id = recipient_id;
-
   AM_SETUP(MSG_TYPE_REQUEST_VOTE);
   AM(term);
   AM(candidate_id);
@@ -106,8 +131,6 @@ raft_status_t raft_write_request_vote_response_envelope(
     raft_envelope_t* p_env,
     raft_nodeid_t recipient_id,
     raft_request_vote_response_args_t const* p_args) {
-  p_env->recipient_id = recipient_id;
-
   AM_SETUP(MSG_TYPE_REQUEST_VOTE_RESPONSE);
   AM(follower_id);
   AM(term);
@@ -116,21 +139,21 @@ raft_status_t raft_write_request_vote_response_envelope(
   return RAFT_STATUS_OK;
 }
 
-void raft_dealloc_envelope(raft_envelope_t* p_envelope) {
-  free(p_envelope->p_message);
-  memset(p_envelope, 0, sizeof(*p_envelope));
-}
+/*******************************************************************************
+ *******************************************************************************
+ ******************************************************************************/
 
 raft_message_type_t raft_message_type(void* p_message_bytes) {
   uint32_t v;
   read(&v, p_message_bytes);
-  switch (v & 0xff) {
-    case MSG_TYPE_REQUEST_VOTE:
-      return MSG_TYPE_REQUEST_VOTE;
-    default:
-      RAFT_ASSERT(RAFT_FALSE);
-      return 0;
+  v &= 0xff;
+  if (v >= 1 && v <= MSG_TYPE_REQUEST_VOTE_RESPONSE) {
+    return v;
   }
+
+  // TODO: log bad input
+
+  return 0;
 }
 
 raft_status_t raft_read_request_vote_args(raft_request_vote_args_t* p_args,
@@ -145,3 +168,14 @@ raft_status_t raft_read_request_vote_args(raft_request_vote_args_t* p_args,
   return RAFT_STATUS_OK;
 }
 
+raft_status_t raft_read_request_vote_response_args(
+    raft_request_vote_response_args_t* p_args,
+    void* p_message_bytes,
+    uint32_t message_size) {
+  RM_SETUP;
+  RM(follower_id);
+  RM(term);
+  RM_BOOL(vote_granted);
+
+  return RAFT_STATUS_OK;
+}

@@ -78,7 +78,7 @@ raft_index_t raft_log_length(raft_log_t const* p_log) {
 static raft_log_node_t* raft_log_node(raft_log_t const* p_log,
                                       raft_index_t index) {
   raft_log_node_t* p_node = p_log->p_head;
-  while (index > 0) {
+  for (; index > 0; --index) {
     RAFT_ASSERT(p_node);
     p_node = p_node->p_next;
   }

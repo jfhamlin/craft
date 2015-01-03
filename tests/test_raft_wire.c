@@ -39,6 +39,9 @@ void Test_raft_write_request_vote_envelope(CuTest* tc) {
   for (uint32_t i = 0; i < arr_size; ++i) {
     CuAssertIntEquals(tc, expected_request_vote_message[i], env.p_message[i]);
   }
+
+  raft_dealloc_envelope(&env);
+  CuAssertPtrEquals(tc, NULL, env.p_message);
 }
 
 void Test_raft_read_request_vote_message(CuTest* tc) {
@@ -90,6 +93,9 @@ void Test_raft_write_request_vote_response_envelope(CuTest* tc) {
                       expected_request_vote_response_message[i],
                       env.p_message[i]);
   }
+
+  raft_dealloc_envelope(&env);
+  CuAssertPtrEquals(tc, NULL, env.p_message);
 }
 
 void Test_raft_read_request_vote_response_message(CuTest* tc) {

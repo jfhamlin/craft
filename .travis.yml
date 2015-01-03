@@ -1,8 +1,10 @@
 language: c
 compiler:
   - clang
-  - gcc
+#  - gcc
 before_install:
+  # Coveralls
+  - sudo pip install cpp-coveralls --use-mirrors
   # g++4.8.1
   - if [ "$CC" == "gcc" ]; then sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test; fi
   # clang 3.4
@@ -11,9 +13,11 @@ before_install:
 install:
   # g++4.8.1
   - if [ "$CC" = "gcc" ]; then sudo apt-get install -qq gcc-4.8; fi
-  - if [ "$CC" = "gcc" ]; then export CC="gcc-4.8"; fi
+  - if [ "$CC" = "gcc" ]; then export CC="gcc-4.8"; alias gcov=gcov-4.8; fi
   # clang 3.4
   - if [ "$CC" == "clang" ]; then sudo apt-get install --allow-unauthenticated -qq clang-3.4; fi
   - if [ "$CC" == "clang" ]; then export CC="clang-3.4"; fi
 script:
   - make test
+after_success:
+  - coveralls --verbose --build-root . --exclude tests/ --exclude g_test_main.c

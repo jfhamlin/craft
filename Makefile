@@ -8,8 +8,10 @@ INCDIRS = inc
 
 CFLAGS = -Wall $(addprefix -I,$(INCDIRS)) -std=c11
 
+GCOV_OUTPUT = *.gcda *.gcno *.gcov
 ifeq ($(CONFIG),debug)
-  DBG_CFLAGS = -g -DDEBUG
+  GCOV_CFLAGS = -fprofile-arcs -ftest-coverage
+  DBG_CFLAGS = -g -DDEBUG $(GCOV_CFLAGS)
   CFLAGS += ${DBG_CFLAGS}
   OPTFLAGS = -O0
 else
@@ -19,6 +21,8 @@ else
 
   OPTFLAGS = -O3
 endif
+
+CFLAGS += $(OPTFLAGS)
 
 PYTHON=python
 
@@ -55,12 +59,12 @@ $(OUTDIR)/%.d: %.c
 
 $(OUTDIR)/%.o: %.c
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(OPTFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 #### Concrete Target Rules ####
 
 raft: $(OBJS)
-	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^
 
 ### Test targets
 
@@ -74,19 +78,21 @@ g_test_main.c: $(TEST_FILES)
 
 test: INCDIRS += tests
 test: $(OBJS) $(OUTDIR)/g_test_main.o $(TEST_OBJECT_FILES)
-	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^
 	./test 2> /dev/null
+
+#	gcov -o $(OUTDIR)/src $(SRCS)
 
 #### Clean ####
 
 clean:
-	rm -rf $(OUTDIR_BASE)/* *~ raft raft.dSYM TAGS test
+	rm -rf $(OUTDIR_BASE)/* *~ raft raft.dSYM TAGS test g_test_main.c
 
 #### flymake helper
 
 .PHONY: check-syntax
 check-syntax:
-	$(CC) $(CFLAGS) $(OPTFLAGS) -o /dev/null -S ${CHK_SOURCES}
+	$(CC) $(CFLAGS) -o /dev/null -S ${CHK_SOURCES}
 
 #### tags
 

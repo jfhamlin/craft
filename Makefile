@@ -4,7 +4,7 @@
 # debug build is the default
 CONFIG=debug
 
-INCDIRS = inc
+INCDIRS = inc deps
 
 CFLAGS = -Wall -Werror $(addprefix -I,$(INCDIRS)) -std=c11
 
@@ -68,7 +68,7 @@ raft: $(OBJS)
 
 ### Test targets
 
-TEST_FILES = $(wildcard tests/*.c)
+TEST_FILES = $(wildcard tests/*.c) $(wildcard deps/heap/*.c)
 TEST_OBJECT_FILES = $(addprefix $(OUTDIR)/, $(subst .c,.o,$(TEST_FILES)))
 
 include $(patsubst %,$(OUTDIR)/%, $(TEST_FILES:.c=.d))
@@ -80,8 +80,6 @@ test: INCDIRS += tests
 test: $(OBJS) $(OUTDIR)/g_test_main.o $(TEST_OBJECT_FILES)
 	$(CC) $(CFLAGS) -o $@ $^
 	./test 2> /dev/null
-
-#	gcov -o $(OUTDIR)/src $(SRCS)
 
 #### Clean ####
 

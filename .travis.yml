@@ -20,4 +20,4 @@ install:
 script:
   - make test
 after_success:
-  - coveralls --verbose --build-root . --exclude tests/ --exclude g_test_main.c
+  - coveralls --verbose --build-root . --exclude tests/ --exclude g_test_main.c --exclude deps/

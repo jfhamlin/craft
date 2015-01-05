@@ -10,6 +10,10 @@
 static raft_bool_t should_begin_election(raft_state_t* p_state);
 static raft_status_t begin_election(raft_state_t* p_state);
 
+static raft_status_t send_append_entries(raft_state_t* p_state,
+                                         raft_nodeid_t recipient_id,
+                                         raft_append_entries_args_t* p_args);
+
 static raft_status_t send_request_vote(raft_state_t* p_state,
                                        raft_nodeid_t recipient_id,
                                        raft_request_vote_args_t* p_args);
@@ -95,7 +99,7 @@ raft_status_t raft_tick(raft_state_t* p_state,
 
     for (uint32_t i = 0; i < p_config->node_count - 1; ++i) {
       if (p_config->p_nodeids[i] != p_state->p.self) {
-        p_config->cb.pf_append_entries_rpc(p_config->p_nodeids[i], &args);
+        send_append_entries(p_state, p_config->p_nodeids[i], &args);
       }
     }
 
@@ -167,6 +171,30 @@ static raft_bool_t should_begin_election(raft_state_t* p_state) {
 /*******************************************************************************
  *******************************************************************************
  ******************************************************************************/
+
+static raft_status_t send_append_entries(raft_state_t* p_state,
+                                         raft_nodeid_t recipient_id,
+                                         raft_append_entries_args_t* p_args) {
+  raft_config_t const* p_config = p_state->p_config;
+
+  raft_status_t status;
+  if (p_config->cb.pf_append_entries_rpc) {
+    status = p_config->cb.pf_append_entries_rpc(recipient_id, p_args);
+  } else {
+    raft_envelope_t envelope = { 0 };
+    status = raft_write_append_entries_envelope(&envelope,
+                                                recipient_id,
+                                                p_args);
+    if (RAFT_SUCCESS(status)) {
+      status = p_config->cb.pf_send_message(recipient_id,
+                                            envelope.p_message,
+                                            envelope.message_size);
+    } else {
+      raft_dealloc_envelope(&envelope);
+    }
+  }
+  return status;
+}
 
 static raft_status_t send_request_vote(raft_state_t* p_state,
                                        raft_nodeid_t recipient_id,

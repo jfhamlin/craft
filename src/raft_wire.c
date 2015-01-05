@@ -291,9 +291,12 @@ raft_status_t raft_read_append_entries_args(raft_append_entries_args_t* p_args,
   RM_U32(&num_entries);
   RM(leader_commit);
 
-  raft_log_entry_t* p_entries = calloc(num_entries, sizeof(raft_log_entry_t));
-  if (p_entries == NULL) {
-    goto fail_oom;
+  raft_log_entry_t* p_entries = NULL;
+  if (num_entries > 0) {
+    p_entries = calloc(num_entries, sizeof(raft_log_entry_t));
+    if (p_entries == NULL) {
+      goto fail_oom;
+    }
   }
 
   for (uint32_t ii = 0; ii < num_entries; ++ii) {

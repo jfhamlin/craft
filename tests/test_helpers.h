@@ -175,9 +175,8 @@ static raft_state_t* make_raft_node(uint32_t id) {
   p_config->election_timeout_max_ms = 1000;
   p_config->election_timeout_min_ms = 500;
 
-  p_config->cb.pf_append_entries_rpc =          &append_entries_rpc;
-  p_config->cb.pf_append_entries_response_rpc = &append_entries_response_rpc;
-
+  /* p_config->cb.pf_append_entries_rpc =          &append_entries_rpc; */
+  /* p_config->cb.pf_append_entries_response_rpc = &append_entries_response_rpc; */
   /* p_config->cb.pf_request_vote_rpc =          &request_vote_rpc; */
   /* p_config->cb.pf_request_vote_response_rpc = &request_vote_response_rpc; */
 

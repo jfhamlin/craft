@@ -22,6 +22,30 @@ raft_status_t raft_recv_message(raft_state_t* p_state,
   raft_status_t status = RAFT_STATUS_OK;
   /* TODO: Validate message version number */
   switch (raft_message_type(p_message_bytes)) {
+    case MSG_TYPE_APPEND_ENTRIES:
+    {
+      raft_append_entries_args_t args;
+      status = raft_read_append_entries_args(&args,
+                                             p_message_bytes,
+                                             buffer_size);
+      if (RAFT_FAILURE(status)) {
+        return status;
+      }
+      status = raft_recv_append_entries(p_state, &args);
+      break;
+    }
+    case MSG_TYPE_APPEND_ENTRIES_RESPONSE:
+    {
+      raft_append_entries_response_args_t args;
+      status = raft_read_append_entries_response_args(&args,
+                                                      p_message_bytes,
+                                                      buffer_size);
+      if (RAFT_FAILURE(status)) {
+        return status;
+      }
+      status = raft_recv_append_entries_response(p_state, &args);
+      break;
+    }
     case MSG_TYPE_REQUEST_VOTE:
     {
       raft_request_vote_args_t args;

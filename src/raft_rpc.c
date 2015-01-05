@@ -1,10 +1,81 @@
+#include <stdlib.h>
+
 #include "raft_rpc.h"
 #include "raft_log.h"
 #include "raft_config.h"
 #include "raft_state.h"
 #include "raft_util.h"
+#include "raft_wire.h"
 
 static raft_status_t promote_to_leader(raft_state_t* p_state);
+static void on_leader_ping(raft_state_t* p_state);
+
+static raft_status_t send_request_vote_response(
+    raft_state_t* p_state,
+    raft_nodeid_t recipient_id,
+    raft_request_vote_response_args_t* p_args);
+
+
+raft_status_t raft_recv_message(raft_state_t* p_state,
+                                void* p_message_bytes,
+                                uint32_t buffer_size) {
+  raft_status_t status = RAFT_STATUS_OK;
+  /* TODO: Validate message version number */
+  switch (raft_message_type(p_message_bytes)) {
+    case MSG_TYPE_APPEND_ENTRIES:
+    {
+      raft_append_entries_args_t args;
+      status = raft_read_append_entries_args(&args,
+                                             p_message_bytes,
+                                             buffer_size);
+      if (RAFT_FAILURE(status)) {
+        return status;
+      }
+      status = raft_recv_append_entries(p_state, &args);
+      break;
+    }
+    case MSG_TYPE_APPEND_ENTRIES_RESPONSE:
+    {
+      raft_append_entries_response_args_t args;
+      status = raft_read_append_entries_response_args(&args,
+                                                      p_message_bytes,
+                                                      buffer_size);
+      if (RAFT_FAILURE(status)) {
+        return status;
+      }
+      status = raft_recv_append_entries_response(p_state, &args);
+      break;
+    }
+    case MSG_TYPE_REQUEST_VOTE:
+    {
+      raft_request_vote_args_t args;
+      status = raft_read_request_vote_args(&args, p_message_bytes, buffer_size);
+      if (RAFT_FAILURE(status)) {
+        return status;
+      }
+      status = raft_recv_request_vote(p_state, &args);
+      break;
+    }
+    case MSG_TYPE_REQUEST_VOTE_RESPONSE:
+    {
+      raft_request_vote_response_args_t args;
+      status = raft_read_request_vote_response_args(&args,
+                                                    p_message_bytes,
+                                                    buffer_size);
+      if (RAFT_FAILURE(status)) {
+        return status;
+      }
+      status = raft_recv_request_vote_response(p_state, &args);
+      break;
+    }
+    default:
+    {
+      RAFT_ASSERT(RAFT_FALSE);
+      break;
+    }
+  }
+  return status;
+}
 
 raft_status_t
 raft_recv_append_entries(raft_state_t* p_state,
@@ -21,12 +92,12 @@ raft_recv_append_entries(raft_state_t* p_state,
   } else if (p_state->type == RAFT_NODE_TYPE_LEADER) {
     RAFT_LOG(p_state,
              "Leader received invalid AppendEntries request for the current"
-             " term from another leader. Sender id: %llu.",
+             " term from another leader. Sender id: %u.",
              p_args->leader_id);
     return RAFT_STATUS_INVALID_ARGS;
   }
 
-  p_state->v.heard_from_leader = RAFT_TRUE;
+  on_leader_ping(p_state);
 
   raft_log_entry_t const* p_prev_entry;
   p_prev_entry = raft_log_entry(p_log, p_args->prev_log_index);
@@ -35,7 +106,7 @@ raft_recv_append_entries(raft_state_t* p_state,
     return RAFT_STATUS_OK;
   }
 
-  raft_log_append(p_state->p.p_log, p_args->p_log_entries);
+  raft_log_append(p_state->p.p_log, p_args->p_log_entries, p_args->num_entries);
 
   p_state->v.commit_index = MIN(MAX(p_state->v.commit_index,
                                     p_args->leader_commit),
@@ -54,7 +125,7 @@ raft_recv_append_entries_response(raft_state_t* p_state,
 raft_status_t
 raft_recv_request_vote(raft_state_t* p_state,
                        raft_request_vote_args_t* p_args) {
-  RAFT_LOG(p_state, "Received vote from nodeid: %llu, term: %u",
+  RAFT_LOG(p_state, "Received vote from nodeid: %u, term: %u",
            p_args->candidate_id, p_args->term);
 
   raft_request_vote_response_args_t response = {
@@ -84,7 +155,7 @@ raft_recv_request_vote(raft_state_t* p_state,
       (p_args->last_log_term == latest_term &&
        p_args->last_log_index + 1 >= raft_log_length(p_log))) {
 
-    RAFT_LOG(p_state, "Voting for nodeid: %llu, term: %u.",
+    RAFT_LOG(p_state, "Voting for nodeid: %u, term: %u.",
              p_args->candidate_id, p_args->term);
     p_state->p.voted_for = p_args->candidate_id;
 
@@ -94,10 +165,7 @@ raft_recv_request_vote(raft_state_t* p_state,
 
 respond:
 
-  p_state->p_config->cb.p_request_vote_response_rpc(
-      p_args->candidate_id, &response);
-
-  return RAFT_STATUS_OK;
+  return send_request_vote_response(p_state, p_args->candidate_id, &response);
 }
 
 raft_status_t
@@ -153,8 +221,43 @@ static raft_status_t promote_to_leader(raft_state_t* p_state) {
   /* Send initial AppendEntries messages to establish leadership. */
   uint32_t const node_count = p_state->p_config->node_count;
   for (uint32_t i = 0; i < node_count; ++i) {
-
+    /* TODO: Actually send the damned messages! */
   }
 
   return RAFT_STATUS_OK;
+}
+
+static void on_leader_ping(raft_state_t* p_state) {
+  raft_config_t* p_config = p_state->p_config;
+
+  p_state->v.ms_since_last_leader_ping = 0;
+  uint32_t range = (p_config->election_timeout_max_ms -
+                    p_config->election_timeout_min_ms);
+  p_state->v.election_timeout_ms = ((rand() % range) +
+                                    p_config->election_timeout_min_ms);
+}
+
+
+static raft_status_t send_request_vote_response(
+    raft_state_t* p_state,
+    raft_nodeid_t recipient_id,
+    raft_request_vote_response_args_t* p_args) {
+  raft_config_t const* p_config = p_state->p_config;
+
+  raft_status_t status;
+  if (p_config->cb.pf_request_vote_response_rpc) {
+    status = p_config->cb.pf_request_vote_response_rpc(recipient_id, p_args);
+  } else {
+    raft_envelope_t envelope = { 0 };
+    status = raft_write_request_vote_response_envelope(&envelope,
+                                                       recipient_id, p_args);
+    if (RAFT_SUCCESS(status)) {
+      status = p_config->cb.pf_send_message(recipient_id,
+                                            envelope.p_message,
+                                            envelope.message_size);
+    } else {
+      raft_dealloc_envelope(&envelope);
+    }
+  }
+  return status;
 }

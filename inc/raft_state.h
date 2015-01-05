@@ -9,7 +9,7 @@ typedef struct raft_config raft_config_t;
 typedef struct raft_state {
   raft_config_t* p_config;
 
-  raft_node_type_t volatile type;
+  raft_node_type_t type;
 
   /**
    * Persistent state.
@@ -28,7 +28,8 @@ typedef struct raft_state {
     raft_index_t commit_index;
     raft_index_t last_applied;
 
-    raft_bool_t volatile heard_from_leader;
+    uint32_t ms_since_last_leader_ping;
+    uint32_t election_timeout_ms;
   } v;
 
   /**
@@ -40,8 +41,6 @@ typedef struct raft_state {
     raft_index_t* p_next_index;
     raft_index_t* p_match_index;
   } l;
-
-  raft_bool_t active;
 } raft_state_t;
 
 void raft_state_set_type(raft_state_t* p_state, raft_node_type_t type);

@@ -21,3 +21,4 @@ raft
 test
 bin/*
 g_*.c
+*.gcov

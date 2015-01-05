@@ -68,7 +68,7 @@ static uint8_t const* read(uint32_t* p_v, uint8_t const* p_b) {
 static uint32_t a_message_sizes[] = {
   0, /* UNKNOWN */
   32, /* MSG_TYPE_APPEND_ENTRIES */
-  0, /* UNKNOWN */
+  28, /* MSG_TYPE_APPEND_ENTRIES_RESPONSE */
   24, /* MSG_TYPE_REQUEST_VOTE */
   20, /* MSG_TYPE_REQUEST_VOTE_RESPONSE */
 };
@@ -222,6 +222,20 @@ raft_status_t raft_write_append_entries_envelope(
   return RAFT_STATUS_OK;
 }
 
+raft_status_t raft_write_append_entries_response_envelope(
+    raft_envelope_t* p_env,
+    raft_nodeid_t recipient_id,
+    raft_append_entries_response_args_t const* p_args) {
+  WM_SETUP(MSG_TYPE_APPEND_ENTRIES_RESPONSE, 0);
+  WM(follower_id);
+  WM(term);
+  WM_BOOL(success);
+  WM(acknowledged_log_index);
+  WM(acknowledged_log_term);
+
+  return RAFT_STATUS_OK;
+}
+
 raft_status_t raft_write_request_vote_envelope(
     raft_envelope_t* p_env,
     raft_nodeid_t recipient_id,
@@ -320,6 +334,20 @@ fail_oom:
   }
 
   return RAFT_STATUS_OUT_OF_MEMORY;
+}
+
+raft_status_t raft_read_append_entries_response_args(
+    raft_append_entries_response_args_t* p_args,
+    void* p_message_bytes,
+    uint32_t message_size) {
+  RM_SETUP;
+  RM(follower_id);
+  RM(term);
+  RM_BOOL(success);
+  RM(acknowledged_log_index);
+  RM(acknowledged_log_term);
+
+  return RAFT_STATUS_OK;
 }
 
 raft_status_t raft_read_request_vote_args(raft_request_vote_args_t* p_args,

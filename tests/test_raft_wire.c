@@ -193,6 +193,64 @@ void Test_raft_read_append_entries_message(CuTest* tc) {
  *******************************************************************************
  ******************************************************************************/
 
+static uint8_t expected_append_entries_response_message[] = {
+  0, 0, 1, MSG_TYPE_APPEND_ENTRIES_RESPONSE,
+  0, 0, 0, 28,
+  0x55, 0x44, 0x33, 0x22,
+  0x99, 0x88, 0x77, 0x66,
+  0x00, 0x00, 0x00, 0x01,
+  0x00, 0x11, 0x00, 0x33,
+  0xff, 0x11, 0xdd, 0x33,
+};
+
+void Test_raft_write_append_entries_response_envelope(CuTest* tc) {
+  raft_append_entries_response_args_t args = {
+    .follower_id = 0x55443322,
+    .term = 0x99887766,
+    .success = RAFT_TRUE,
+    .acknowledged_log_index = 0x00110033,
+    .acknowledged_log_term = 0xff11dd33,
+  };
+
+  raft_envelope_t env = { 0 };
+  CuAssertIntEquals(tc, RAFT_STATUS_OK,
+                    raft_write_append_entries_response_envelope(&env, 1, &args));
+
+  CuAssertIntEquals(tc, 1, env.recipient_id);
+  CuAssertIntEquals(tc, 28, env.message_size);
+  CuAssertIntEquals(tc, 0x100, env.buffer_capacity);
+
+  uint32_t const arr_size = ARRAY_ELEMENT_COUNT(expected_append_entries_response_message);
+  for (uint32_t i = 0; i < arr_size; ++i) {
+    CuAssertIntEquals(tc, expected_append_entries_response_message[i], env.p_message[i]);
+  }
+
+  raft_dealloc_envelope(&env);
+  CuAssertPtrEquals(tc, NULL, env.p_message);
+}
+
+void Test_raft_read_append_entries_response_message(CuTest* tc) {
+  raft_append_entries_response_args_t args = { 0 };
+
+  CuAssertIntEquals(tc, RAFT_STATUS_OK,
+                    raft_read_append_entries_response_args(
+                        &args,
+                        expected_append_entries_response_message,
+                        sizeof(expected_append_entries_response_message)));
+
+  CuAssertIntEquals(tc, 0x55443322, args.follower_id);
+  CuAssertIntEquals(tc, 0x99887766, args.term);
+  CuAssertIntEquals(tc, RAFT_TRUE, args.success);
+  CuAssertIntEquals(tc, 0x00110033, args.acknowledged_log_index);
+  CuAssertIntEquals(tc, 0xff11dd33, args.acknowledged_log_term);
+}
+
+/*******************************************************************************
+ *******************************************************************************
+ *************************** RequestVote Wire Format ***************************
+ *******************************************************************************
+ ******************************************************************************/
+
 static uint8_t expected_request_vote_message[] = {
   0, 0, 1, MSG_TYPE_REQUEST_VOTE,
   0, 0, 0, 24,

@@ -19,8 +19,8 @@ void raft_free(raft_state_t* p_state);
 /**
  *
  */
-raft_status_t raft_tick(uint32_t* p_reschedule_ms,
-                        raft_state_t* p_state,
+raft_status_t raft_tick(raft_state_t* p_state,
+                        uint32_t* p_reschedule_ms,
                         uint32_t elapsed_ms);
 
 /**

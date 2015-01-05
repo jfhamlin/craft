@@ -82,7 +82,7 @@ raft_recv_append_entries(raft_state_t* p_state,
     return RAFT_STATUS_OK;
   }
 
-  raft_log_append(p_state->p.p_log, p_args->p_log_entries);
+  raft_log_append(p_state->p.p_log, p_args->p_log_entries, p_args->num_entries);
 
   p_state->v.commit_index = MIN(MAX(p_state->v.commit_index,
                                     p_args->leader_commit),

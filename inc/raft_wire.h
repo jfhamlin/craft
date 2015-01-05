@@ -35,6 +35,10 @@ void raft_dealloc_envelope(raft_envelope_t* p_envelope);
 
 raft_message_type_t raft_message_type(void* p_message_bytes);
 
+raft_status_t raft_read_append_entries_args(raft_append_entries_args_t* p_args,
+                                            void* p_message_bytes,
+                                            uint32_t message_size);
+
 raft_status_t raft_read_request_vote_args(raft_request_vote_args_t* p_args,
                                           void* p_message_bytes,
                                           uint32_t message_size);

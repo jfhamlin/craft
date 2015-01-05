@@ -34,6 +34,8 @@ raft_status_t raft_log_append_user(raft_log_t* p_log,
                                    void* p_data,
                                    uint32_t data_size);
 
-raft_status_t raft_log_append(raft_log_t* p_log, raft_log_t* p_entries);
+raft_status_t raft_log_append(raft_log_t* p_log,
+                              raft_log_entry_t* p_entries,
+                              uint32_t num_entries);
 
 #endif

@@ -125,7 +125,9 @@ raft_status_t raft_log_append_user(raft_log_t* p_log,
   return RAFT_STATUS_OK;
 }
 
-raft_status_t raft_log_append(raft_log_t* p_log, raft_log_t* p_entries) {
+raft_status_t raft_log_append(raft_log_t* p_log,
+                              raft_log_entry_t* p_entries,
+                              uint32_t num_entries) {
   if (p_entries) {
     RAFT_ASSERT(RAFT_FALSE);
   }

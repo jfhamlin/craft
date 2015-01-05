@@ -4,7 +4,7 @@
 #include "raft_types.h"
 
 typedef struct raft_state raft_state_t;
-typedef struct raft_log raft_log_t;
+typedef struct raft_log_entry raft_log_entry_t;
 
 /**
  *
@@ -18,7 +18,8 @@ typedef struct {
   raft_nodeid_t      leader_id;
   raft_index_t       prev_log_index;
   raft_term_t        prev_log_term;
-  raft_log_t*        p_log_entries;
+  raft_log_entry_t*  p_log_entries;
+  uint32_t           num_entries;
   uint32_t           leader_commit;
 } raft_append_entries_args_t;
 

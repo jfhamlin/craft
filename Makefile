@@ -6,7 +6,7 @@ CONFIG=debug
 
 INCDIRS = inc
 
-CFLAGS = -Wall $(addprefix -I,$(INCDIRS)) -std=c11
+CFLAGS = -Wall -Werror $(addprefix -I,$(INCDIRS)) -std=c11
 
 GCOV_OUTPUT = *.gcda *.gcno *.gcov
 ifeq ($(CONFIG),debug)

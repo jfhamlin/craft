@@ -138,7 +138,7 @@ static void process_event() {
     case EVENT_TYPE_TICK:
     {
       uint32_t next_tick_ms;
-      raft_tick(&next_tick_ms, p_state, next.elapsed_ms);
+      raft_tick(p_state, &next_tick_ms, next.elapsed_ms);
       next.elapsed_ms = next_tick_ms;
       schedule_event(next.node_id, next_tick_ms, next);
       break;
